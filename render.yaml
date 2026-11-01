@@ -1,0 +1,22 @@
+# Render Blueprint: New → Blueprint → shu repozitoriyni tanlang.
+# Bepul web service: Telegram webhook so'rovlari "uxlagan" servisni uyg'otadi.
+services:
+  - type: web
+    name: test-maker-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m bot
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.0
+      - key: BOT_TOKEN
+        sync: false # Render panelida o'zingiz kiritasiz
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
+      - key: WEBHOOK_SECRET
+        generateValue: true
