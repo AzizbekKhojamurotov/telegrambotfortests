@@ -13,7 +13,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message, MessageEntity)
 
-from . import ai, config, export
+from . import ai, branding, config, export
 from .extract import UnsupportedFile, extract, tag
 from .models import Extracted, ParseResult, Question
 from .service import NeedsAI, analyze
@@ -73,16 +73,62 @@ def session_for(user_id: int) -> Session:
 
 # ---------------------------------------------------------------- texts
 
-START_TEXT = (
-    "👋 Salom! Men test savollarini <b>Blooket</b> va <b>Kahoot</b> uchun import fayliga aylantiraman.\n\n"
-    "📥 Menga quyidagilardan birini yuboring:\n"
-    "• fayl: .docx, .pdf, .xlsx, .xls, .csv, .pptx, .txt, .html, .rtf\n"
-    "• rasm yoki skanerlangan PDF (AI orqali o'qiladi)\n"
-    "• yoki savollarni oddiy matn qilib yozing\n\n"
-    "Bir nechta fayl yoki xabar yuborsangiz, savollar bitta testga qo'shiladi. "
-    "So'ng Blooket (.csv) yoki Kahoot (.xlsx) faylini tanlab olasiz.\n\n"
-    "Format namunalari: /help · Yangi test: /new"
+def start_text(first_name: str | None) -> str:
+    name = html.escape(first_name or "do'stim")
+    return (
+        f"👋 <b>Assalomu alaykum, {name}!</b>\n\n"
+        "Men test savollaringizni <b>Kahoot</b> va <b>Blooket</b> uchun tayyor import fayliga aylantiraman.\n\n"
+        "<b>Qanday ishlaydi?</b>\n"
+        "1️⃣ Testni yuboring: fayl, rasm yoki matn\n"
+        "2️⃣ Savollarni tekshiring, vaqtni tanlang\n"
+        "3️⃣ <b>Kahoot</b> yoki <b>Blooket</b> tugmasini bosing, fayl tayyor!\n\n"
+        "📎 Word · PDF · Excel · PowerPoint · CSV · TXT · rasm\n"
+        "🤖 ChatGPT, Gemini yoki Claude'dan nusxalangan matn ham bo'ladi.\n\n"
+        "👇 Testingizni yuboring yoki namunani sinab ko'ring."
+    )
+
+
+def start_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🧪 Namunani sinab ko'rish", callback_data="go:demo")],
+        [InlineKeyboardButton(text="📖 Formatlar", callback_data="go:help"),
+         InlineKeyboardButton(text="📥 Import qilish", callback_data="go:guide")],
+    ])
+
+
+GUIDE_TEXT = (
+    "<b>📥 Tayyor faylni platformaga yuklash</b>\n\n"
+    "🟣 <b>Kahoot</b> (.xlsx)\n"
+    "1. kahoot.com → <b>Create</b> → <b>Kahoot</b>\n"
+    "2. <b>Add question</b> → <b>Import spreadsheet</b>\n"
+    "3. Botdan kelgan <code>.xlsx</code> faylni tanlang\n\n"
+    "📘 <b>Blooket</b> (.csv)\n"
+    "1. blooket.com → <b>Create</b> → <b>Spreadsheet Import</b>\n"
+    "2. <b>Upload CSV</b> tugmasini bosing\n"
+    "3. Botdan kelgan <code>.csv</code> faylni tanlang\n\n"
+    "💡 Faylni Excel'da ochib saqlamang: Excel CSV'ni boshqa ko'rinishda saqlab qo'yishi mumkin."
 )
+
+DEMO_TEXT = """1. O'zbekiston poytaxti qaysi shahar?
+A) Samarqand
+B) Toshkent
+C) Buxoro
+D) Xiva
+Javob: B
+
+2. Quyosh tizimidagi eng katta sayyora qaysi?
+A) Yer
+B) Mars
+C) Yupiter
+D) Saturn
+Javob: C
+
+3. 7 × 8 nechaga teng?
+A) 54
+B) 56
+C) 64
+D) 48
+Javob: B"""
 
 HELP_TEXT = (
     "<b>Tushuniladigan formatlar</b>\n\n"
@@ -213,12 +259,48 @@ async def refresh_summary(cb: CallbackQuery, s: Session):
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     SESSIONS.pop(message.from_user.id, None)
-    await message.answer(START_TEXT)
+    text, kb = start_text(message.from_user.first_name), start_kb()
+    try:
+        sent = await message.answer_photo(branding.banner(), caption=text, reply_markup=kb)
+        branding.remember_banner(sent.photo[-1].file_id)
+    except Exception:
+        log.exception("welcome banner failed")
+        await message.answer(text, reply_markup=kb)
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(HELP_TEXT)
+
+
+@router.message(Command("guide"))
+async def cmd_guide(message: Message):
+    await message.answer(GUIDE_TEXT)
+
+
+@router.callback_query(F.data == "go:help")
+async def cb_help(cb: CallbackQuery):
+    await cb.message.answer(HELP_TEXT)
+    await cb.answer()
+
+
+@router.callback_query(F.data == "go:guide")
+async def cb_guide(cb: CallbackQuery):
+    await cb.message.answer(GUIDE_TEXT)
+    await cb.answer()
+
+
+@router.callback_query(F.data == "go:demo")
+async def cb_demo(cb: CallbackQuery):
+    await cb.answer()
+    SESSIONS.pop(cb.from_user.id, None)
+    s = session_for(cb.from_user.id)
+    await cb.message.answer(
+        "🧪 <b>Namuna test.</b> O'zingiz ham shunday matn yuborishingiz mumkin:\n\n"
+        f"<code>{html.escape(DEMO_TEXT)}</code>"
+    )
+    s.text_parts.append(DEMO_TEXT)
+    await _analyze_text(cb.message, s)
 
 
 @router.message(Command("new"))
@@ -339,6 +421,10 @@ async def _text_after_pause(message: Message, s: Session):
     # from here on a newer message must not cancel us; it starts its own run instead
     if s.debounce is asyncio.current_task():
         s.debounce = None
+    await _analyze_text(message, s)
+
+
+async def _analyze_text(message: Message, s: Session):
     async with s.lock:
         ex = Extracted(text="\n".join(s.text_parts))
         status = await message.answer("⏳ Matn tahlil qilinmoqda…")
@@ -363,7 +449,7 @@ async def _text_after_pause(message: Message, s: Session):
 
 @router.message()
 async def on_other(message: Message):
-    await message.reply("Menga test savollari yozilgan fayl, rasm yoki matn yuboring. Yordam: /help")
+    await message.reply("Menga test savollari yozilgan fayl, rasm yoki matn yuboring. Formatlar: /help · Import: /guide")
 
 
 # ---------------------------------------------------------------- callbacks
@@ -519,8 +605,8 @@ def _shuffled(questions: list[Question]) -> list[Question]:
 
 
 CAPTIONS = {
-    "blooket": "📘 <b>Blooket</b>: Create → Spreadsheet Import → Upload CSV → shu .csv faylni yuklang.",
-    "kahoot": "🟣 <b>Kahoot</b>: Create → Kahoot → Add question → Import spreadsheet → shu faylni yuklang.",
+    "blooket": "📘 <b>Blooket uchun tayyor!</b>\nCreate → Spreadsheet Import → Upload CSV → shu faylni tanlang.",
+    "kahoot": "🟣 <b>Kahoot uchun tayyor!</b>\nCreate → Kahoot → Add question → Import spreadsheet → shu faylni tanlang.",
 }
 
 

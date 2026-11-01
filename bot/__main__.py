@@ -7,9 +7,8 @@ import sys
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
 
-from . import ai, config
+from . import ai, branding, config
 from .handlers import router
 
 log = logging.getLogger("bot")
@@ -19,14 +18,6 @@ def _secret() -> str:
     # Telegram allows only A-Z a-z 0-9 _ - in the secret token, while Render's generated values
     # are base64 (+ / =): always hash, so any WEBHOOK_SECRET (or the bot token) becomes a valid one
     return hashlib.sha256((config.WEBHOOK_SECRET or config.BOT_TOKEN).encode()).hexdigest()
-
-
-async def _set_commands(bot: Bot):
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Botni boshlash"),
-        BotCommand(command="new", description="Yangi test"),
-        BotCommand(command="help", description="Qo'llab-quvvatlanadigan formatlar"),
-    ])
 
 
 async def run_polling(bot: Bot, dp: Dispatcher):
@@ -39,7 +30,7 @@ async def run_polling(bot: Bot, dp: Dispatcher):
         )
     if info.url:
         await bot.delete_webhook()
-    await _set_commands(bot)
+    await branding.apply(bot)
     await dp.start_polling(bot)
 
 
@@ -53,7 +44,7 @@ def run_webhook(bot: Bot, dp: Dispatcher):
 
     async def on_startup(bot: Bot):
         await bot.set_webhook(url, secret_token=_secret(), allowed_updates=dp.resolve_used_update_types())
-        await _set_commands(bot)
+        await branding.apply(bot)
         log.info("Webhook set: %s", url)
 
     async def health(_request):
