@@ -16,8 +16,9 @@ log = logging.getLogger("bot")
 
 
 def _secret() -> str:
-    # Telegram allows A-Z a-z 0-9 _ - in the secret token; derive one from the bot token if none is set
-    return config.WEBHOOK_SECRET or hashlib.sha256(config.BOT_TOKEN.encode()).hexdigest()
+    # Telegram allows only A-Z a-z 0-9 _ - in the secret token, while Render's generated values
+    # are base64 (+ / =): always hash, so any WEBHOOK_SECRET (or the bot token) becomes a valid one
+    return hashlib.sha256((config.WEBHOOK_SECRET or config.BOT_TOKEN).encode()).hexdigest()
 
 
 async def _set_commands(bot: Bot):
