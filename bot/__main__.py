@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from . import ai, branding, config
+from . import ai, branding, config, generate
 from .handlers import router
 
 log = logging.getLogger("bot")
@@ -66,6 +66,7 @@ def main():
         logging.warning("GEMINI_API_KEY yo'q: rasm va skan PDF o'qilmaydi, AI zaxira o'chiq.")
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
+    dp.include_router(generate.router)  # first: while a quiz is being set up it takes the user's input
     dp.include_router(router)
     if config.WEBHOOK_BASE:
         run_webhook(bot, dp)

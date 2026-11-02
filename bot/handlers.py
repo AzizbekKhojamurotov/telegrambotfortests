@@ -15,7 +15,7 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButto
 
 from . import ai, branding, config, export
 from .extract import UnsupportedFile, extract, tag
-from .models import Extracted, ParseResult, Question
+from .models import Extracted, GenRequest, ParseResult, Question
 from .service import NeedsAI, analyze
 
 log = logging.getLogger(__name__)
@@ -43,6 +43,7 @@ class Session:
     debounce: asyncio.Task | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     ai_solved: int = 0
+    gen: GenRequest | None = None  # AI quiz generation in progress (bot/generate.py)
 
     def all_sources(self) -> list[Source]:
         return self.sources + ([self.text_source] if self.text_source else [])
@@ -84,12 +85,14 @@ def start_text(first_name: str | None) -> str:
         "3️⃣ <b>Kahoot</b> yoki <b>Blooket</b> tugmasini bosing, fayl tayyor!\n\n"
         "📎 Word · PDF · Excel · PowerPoint · CSV · TXT · rasm\n"
         "🤖 ChatGPT, Gemini yoki Claude'dan nusxalangan matn ham bo'ladi.\n\n"
-        "👇 Testingizni yuboring yoki namunani sinab ko'ring."
+        "✨ <b>Testingiz yo'qmi?</b> Mavzu yoki dars materialini bering, AI o'zi test tuzib beradi.\n\n"
+        "👇 Testingizni yuboring yoki pastdagi tugmalardan birini tanlang."
     )
 
 
 def start_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✨ AI bilan test tuzish", callback_data="gen:start")],
         [InlineKeyboardButton(text="🧪 Namunani sinab ko'rish", callback_data="go:demo")],
         [InlineKeyboardButton(text="📖 Formatlar", callback_data="go:help"),
          InlineKeyboardButton(text="📥 Import qilish", callback_data="go:guide")],
@@ -149,7 +152,9 @@ HELP_TEXT = (
     "• Har bir savolda 2–4 ta variant bo'ladi (4 tadan ko'p bo'lsa, to'g'ri javob saqlanib, ortiqchasi olib tashlanadi)\n"
     "• Kahoot: savol 120 belgigacha, javob 75 belgigacha (oshgani qisqartiriladi)\n"
     "• Vaqt: 5, 10, 20, 30, 60, 90, 120 yoki 240 soniya\n"
-    "• Har bir faylga 100 tagacha savol sig'adi, ko'p bo'lsa qismlarga bo'linadi"
+    "• Har bir faylga 100 tagacha savol sig'adi, ko'p bo'lsa qismlarga bo'linadi\n\n"
+    "✨ <b>Testingiz yo'qmi?</b> /generate: mavzu yoki material bering, AI test tuzib beradi "
+    f"({config.GEN_MAX_QUESTIONS} savolgacha, kuniga {config.GEN_DAILY_LIMIT} ta)."
 )
 
 
@@ -165,7 +170,9 @@ def summary_text(s: Session) -> str:
     lines = [f"📋 <b>{len(qs)} ta savol topildi</b>"]
     if names:
         lines.append(f"Manba: {names}")
-    if any(src.result.used_ai for src in s.all_sources()):
+    if any(src.result.generated for src in s.all_sources()):
+        lines.append("✨ Test AI tomonidan tuzildi — javoblarni ko'rib chiqishni tavsiya qilaman.")
+    elif any(src.result.used_ai for src in s.all_sources()):
         lines.append("🤖 Savollar Gemini AI yordamida ajratildi — ko'rib chiqishni tavsiya qilaman.")
     multi = sum(len(q.correct) > 1 for q in qs)
     if multi:
@@ -262,7 +269,8 @@ async def cmd_start(message: Message):
     text, kb = start_text(message.from_user.first_name), start_kb()
     try:
         sent = await message.answer_photo(branding.banner(), caption=text, reply_markup=kb)
-        branding.remember_banner(sent.photo[-1].file_id)
+        if sent.photo:
+            branding.remember_banner(sent.photo[-1].file_id)
     except Exception:
         log.exception("welcome banner failed")
         await message.answer(text, reply_markup=kb)

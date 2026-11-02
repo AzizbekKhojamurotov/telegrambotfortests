@@ -22,3 +22,9 @@ KAHOOT_TEMPLATE = TEMPLATES / "kahoot_template.xlsx"
 
 # Telegram Bot API can only download files up to 20 MB
 MAX_FILE_BYTES = 20 * 1024 * 1024
+
+# AI quiz generation limits
+GEN_MAX_QUESTIONS = 30
+GEN_DAILY_LIMIT = int(os.getenv("GEN_DAILY_LIMIT", "3"))  # generated tests per user per day (Tashkent time)
+GEN_MAX_FILE_BYTES = 5 * 1024 * 1024  # source material file
+GEN_MAX_CHARS = 20_000  # source material text, about 10 pages

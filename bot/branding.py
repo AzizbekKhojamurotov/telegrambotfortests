@@ -29,6 +29,7 @@ SHORT_DESCRIPTION = "Testlaringizni Kahoot (.xlsx) va Blooket (.csv) fayliga ayl
 
 COMMANDS = [
     BotCommand(command="start", description="🏠 Bosh sahifa"),
+    BotCommand(command="generate", description="✨ AI bilan test tuzish"),
     BotCommand(command="new", description="🆕 Yangi test boshlash"),
     BotCommand(command="guide", description="📥 Faylni Kahoot / Blooket'ga yuklash"),
     BotCommand(command="help", description="📖 Qo'llab-quvvatlanadigan formatlar"),

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import re
 
 from pydantic import BaseModel
@@ -31,6 +32,30 @@ Return a JSON list with one item per question, in the same order: {"id": <id>, "
 Choose more than one option only when the question clearly asks for several answers.
 
 """
+
+
+GENERATE_PROMPT = """You are an experienced teacher writing a multiple-choice quiz.
+
+Write exactly {count} questions{source_rule}
+Difficulty: {level}.
+Language of questions and answers: {lang}.
+
+Rules:
+- Every question has exactly 4 answer options and exactly ONE correct option.
+- The correct answer must be factually right; if you are not sure about a fact, ask about something else.
+- Wrong options are plausible, of similar length and style to the correct one. No "all of the above" / "none of the above".
+- Question text at most 110 characters, each option at most 70 characters (the quiz is imported into Kahoot).
+- Do not number questions or label options (no "1.", "A)").
+- Questions must not repeat each other; cover different parts of the {scope}.
+- "correct" = list with the 1-based number of the correct option.
+"""
+
+LEVELS = {
+    "easy": "easy (basic facts and definitions)",
+    "medium": "medium (understanding and simple application)",
+    "hard": "hard (analysis, comparison, multi-step reasoning)",
+}
+LANGS = {"uz": "Uzbek (Latin script)", "ru": "Russian", "en": "English"}
 
 
 class AIQuestion(BaseModel):
@@ -164,6 +189,45 @@ async def parse(text: str = "", media: tuple[bytes, str] | None = None) -> list[
         items = await _generate([EXTRACT_PROMPT + "\n--- MATERIAL ---\n" + chunk], list[AIQuestion])
         questions.extend(_to_questions(items))
     return questions
+
+
+async def generate(count: int, level: str, lang: str, topic: str = "", material: str = "",
+                   media: tuple[bytes, str] | None = None) -> list[Question]:
+    """Writes a new quiz about `topic`, or based on `material` text / `media` (photo, scanned PDF)."""
+    from google.genai import types
+
+    if material or media:
+        source_rule = (" based ONLY on the material below. Every question and correct answer must be "
+                       "supported by the material; do not use outside facts.")
+        scope = "material"
+    else:
+        source_rule = f" about this topic: {topic}"
+        scope = "topic"
+    prompt = GENERATE_PROMPT.format(count=count, source_rule=source_rule, level=LEVELS[level],
+                                    lang=LANGS[lang], scope=scope)
+    if media:
+        contents = [types.Part.from_bytes(data=media[0], mime_type=media[1]), prompt]
+    elif material:
+        contents = [prompt + "\n--- MATERIAL ---\n" + _tags_to_words(material)]
+    else:
+        contents = [prompt]
+    items = await _generate(contents, list[AIQuestion])
+
+    out: list[Question] = []
+    seen: set[str] = set()
+    for q in _to_questions(items):
+        key = q.text.casefold()
+        if key in seen or len(q.correct) != 1 or not 2 <= len(q.answers) <= 4:
+            continue
+        seen.add(key)
+        # models like to put the right answer in the same slot: spread it out
+        order = list(range(len(q.answers)))
+        random.shuffle(order)
+        q.answers = [q.answers[i] for i in order]
+        q.correct = [order.index(q.correct[0])]
+        q.ai_guessed = True
+        out.append(q)
+    return out[:count]
 
 
 async def solve(questions: list[Question]) -> dict[int, list[int]]:

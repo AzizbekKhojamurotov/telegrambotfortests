@@ -32,11 +32,32 @@ class ParseResult:
     # questions dropped because they had fewer than two answers
     dropped: list[str] = field(default_factory=list)
     used_ai: bool = False
+    # questions were written by AI (quiz generation), not extracted from the source
+    generated: bool = False
 
     @property
     def missing_correct(self) -> list[int]:
         """1-based positions of questions without a correct answer."""
         return [i + 1 for i, q in enumerate(self.questions) if not q.has_correct]
+
+
+@dataclass
+class GenRequest:
+    """An AI quiz being set up: source (topic or material) and options."""
+    stage: str = "source"  # source -> options -> running
+    topic: str = ""
+    material: str = ""
+    media: tuple[bytes, str] | None = None
+    source_name: str = ""
+    count: int = 10
+    level: str = "medium"
+    lang: str = "uz"
+    # pasted material may arrive split into several messages
+    parts: list[str] = field(default_factory=list)
+
+    @property
+    def has_source(self) -> bool:
+        return bool(self.topic or self.material or self.media)
 
 
 @dataclass

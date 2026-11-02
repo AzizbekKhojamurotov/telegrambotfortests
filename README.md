@@ -46,6 +46,23 @@ so'ng `FORCE_POLLING=1` bilan ishga tushiring. Bu webhook'ni o'chiradi.
    to'ldiriladi (Blooket: 3-qatordan, Kahoot: 9-qatordan, B–H ustunlar). Kahoot `.xlsx` da logo, validatsiya va
    formatlash saqlanadi; Blooket faqat CSV qabul qiladi, shuning uchun shablon CSV ko'rinishida eksport qilinadi.
 
+## AI bilan test tuzish (`/generate`, `bot/generate.py`)
+
+Foydalanuvchi **mavzu** (300 belgigacha) yoki **material** yuboradi: matn, Word, PDF, PowerPoint, TXT yoki rasm.
+So'ng savollar sonini (5–30), qiyinlikni va tilni tanlaydi, Gemini testni tuzadi va test oddiy eksport oqimiga
+tushadi. Savollar Kahoot chegaralariga moslab tuziladi: 4 ta variant, bitta to'g'ri javob, savol ≤ 110,
+variant ≤ 70 belgi. To'g'ri javobning o'rni aralashtiriladi.
+
+| Cheklov | Qiymat |
+|---|---|
+| Savollar soni | ≤ 30 |
+| Material fayli | ≤ 5 MB |
+| Material matni | ≤ 20 000 belgi (≈10 bet) |
+| Kunlik limit | 3 ta test / foydalanuvchi (`GEN_DAILY_LIMIT`), Toshkent vaqti bilan 00:00 da yangilanadi |
+
+Limit faqat test muvaffaqiyatli tuzilganda sarflanadi. Hisoblagich xotirada saqlanadi, shuning uchun servis
+qayta ishga tushsa (Render bepul tarifida servis uxlab qolganda ham) u nolga tushadi.
+
 ## Platforma cheklovlari
 
 | | Blooket | Kahoot |
